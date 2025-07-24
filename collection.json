@@ -1,0 +1,131 @@
+{
+  "info": {
+    "name": "League Simulator API",
+    "_postman_id": "12345678-90ab-cdef-1234-567890abcdef",
+    "description": "Simülasyon API'si test koleksiyonu",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Simulate One Week",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "https://league-simulator-282922766146.europe-west1.run.app/simulate/week",
+          "protocol": "https",
+          "host": [
+            "league-simulator-282922766146.europe-west1.run.app"
+          ],
+          "path": ["simulate", "week"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Simulate All",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "https://league-simulator-282922766146.europe-west1.run.app/simulate/all",
+          "protocol": "https",
+          "host": [
+            "league-simulator-282922766146.europe-west1.run.app"
+          ],
+          "path": ["simulate", "all"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Standings",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://league-simulator-282922766146.europe-west1.run.app/standings",
+          "protocol": "https",
+          "host": [
+            "league-simulator-282922766146.europe-west1.run.app"
+          ],
+          "path": ["standings"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Predict Remaining",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://league-simulator-282922766146.europe-west1.run.app/predict",
+          "protocol": "https",
+          "host": [
+            "league-simulator-282922766146.europe-west1.run.app"
+          ],
+          "path": ["predict"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Matches",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://league-simulator-282922766146.europe-west1.run.app/matches",
+          "protocol": "https",
+          "host": [
+            "league-simulator-282922766146.europe-west1.run.app"
+          ],
+          "path": ["matches"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Edit Match Result",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"match_id\": 1,\n  \"home_goals\": 2,\n  \"away_goals\": 1\n}"
+        },
+        "url": {
+          "raw": "https://league-simulator-282922766146.europe-west1.run.app/match/edit",
+          "protocol": "https",
+          "host": [
+            "league-simulator-282922766146.europe-west1.run.app"
+          ],
+          "path": ["match", "edit"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Reset League",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "https://league-simulator-282922766146.europe-west1.run.app/reset",
+          "protocol": "https",
+          "host": [
+            "league-simulator-282922766146.europe-west1.run.app"
+          ],
+          "path": ["reset"]
+        }
+      },
+      "response": []
+    }
+  ]
+}
