@@ -1,15 +1,6 @@
-# League Simulator
+# Football League Simulator API
 
-A comprehensive football league simulation API built with Go that allows you to simulate matches, track standings, predict championship probabilities, and manage league data.
-
-## Features
-
-- **Match Simulation**: Simulate individual weeks or entire seasons
-- **Standings Management**: Real-time league table with points, goals, and statistics
-- **Championship Predictions**: AI-powered predictions based on current form (available from week 4)
-- **Match Result Editing**: Manually edit match results and recalculate standings
-- **League Reset**: Reset the entire league to start fresh
-- **RESTful API**: Clean HTTP endpoints for all operations
+A comprehensive football league simulation API built with Go that allows you to simulate matches, track standings, predict championship probabilities, and manage league data
 
 ## Tech Stack
 
@@ -32,227 +23,238 @@ League Simulator/
 │   └── predictor.go        # Championship prediction algorithms
 ├── db/
 │   └── schema.sql          # Database schema
+│   └── queries.sql         # Database queries
 ├── collection.json         # Postman collection for API testing
 ├── Dockerfile             # Docker configuration
 ├── go.mod                 # Go dependencies
 └── main.go               # Application entry point
 ```
 
-## API Endpoints
+## 🚀 API Endpoints & Implementation
 
-### Core Simulation
-- `POST /simulate/week` - Simulate one week of matches
-- `POST /simulate/all` - Simulate all remaining matches
-- `POST /reset` - Reset league to initial state
+### Core Simulation Engine
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/simulate/week` | POST | Simulate one week of matches
+| `/simulate/all` | POST | Simulate entire remaining season
+| `/reset` | POST | Reset league to initial state
 
-### Data Access
-- `GET /standings` - Get current league standings
-- `GET /matches` - Get all matches (played and unplayed)
-- `GET /predict` - Get championship predictions (available from week 4+)
+### Data Retrieval  
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/standings` | GET | Current league table |
+| `/matches` | GET | All fixtures (played/unplayed) |
+| `/predict` | GET | Championship probabilities |
 
 ### Match Management
-- `POST /match/edit` - Edit a specific match result
-  ```json
-  {
-    "match_id": 1,
-    "home_goals": 2,
-    "away_goals": 1
-  }
-  ```
+| Endpoint | Method | Description | 
+|----------|--------|-------------|
+| `/match/edit` | POST | Edit specific match result |
 
-## Getting Started
+**Request Format:**
+```json
+{
+  "match_id": 1,
+  "home_goals": 2,
+  "away_goals": 1
+}
+```
+
+## 💾 Database Schema Design
+
+```sql
+-- Team entity with strength rating
+CREATE TABLE teams (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    strength INTEGER NOT NULL  -- Used in simulation algorithm
+);
+
+-- Match entity with complete game state
+CREATE TABLE matches (
+    id INTEGER PRIMARY KEY,
+    home_team_id INTEGER,
+    away_team_id INTEGER,
+    home_goals INTEGER,
+    away_goals INTEGER,
+    played BOOLEAN,
+    week INTEGER,
+    FOREIGN KEY (home_team_id) REFERENCES teams(id),
+    FOREIGN KEY (away_team_id) REFERENCES teams(id)
+);
+
+-- League standings with comprehensive statistics
+CREATE TABLE standings (
+    team_id INTEGER PRIMARY KEY,
+    played INTEGER,
+    won INTEGER,
+    drawn INTEGER,
+    lost INTEGER,
+    goals_for INTEGER,
+    goals_against INTEGER,
+    goal_diff INTEGER,
+    points INTEGER,
+    FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+```
+
+## 🚀 Getting Started
 
 ### Prerequisites
-- Go 1.24+
-- Docker (optional)
-- Google Cloud CLI (for deployment)
+- **Go 1.24+** (Uses latest language features)
+- **Docker** (Optional, for containerization)
+- **Google Cloud CLI** (For production deployment)
 
-### Local Development
+### Local Development Setup
 
-1. **Clone the repository**
+1. **Clone and Initialize**
    ```bash
-   git clone <repository-url>
-   cd "League Simulator"
-   ```
-
-2. **Install dependencies**
-   ```bash
+   git clone https://github.com/aharunu/Football-League-Simulator-API.git
+   cd Football-League-Simulator-API
    go mod download
    ```
 
-3. **Run the application**
+2. **Run Application**
    ```bash
    go run .
+   # Server starts at http://localhost:8080
    ```
 
-4. **Test the API**
+3. **Verify Installation**
    ```bash
+   curl http://localhost:8080/standings
+   # Should return empty standings array: []
+   ```
+
+4. **Test Core Functionality**
+   ```bash
+   # Simulate first week
+   curl -X POST http://localhost:8080/simulate/week
+   
+   # Check updated standings
    curl http://localhost:8080/standings
    ```
 
-### Docker Deployment
+## 🧪 API Testing & Validation
 
-1. **Build Docker image**
-   ```bash
-   docker build -t league-simulator .
-   ```
+### Production Postman Collection
 
-2. **Run container**
-   ```bash
-   docker run -p 8080:8080 league-simulator
-   ```
+A dedicated Postman collection is included for the live production instance. All endpoints are pre-configured to use the production base URL:
 
-### Cloud Deployment (Google Cloud Run)
+- **Base URL:** `https://league-simulator-282922766146.europe-west1.run.app`
+- **Usage:** Import `collection.json` and select the "Production" environment to test live API endpoints.
 
-1. **Create Google Cloud project**
-   ```bash
-   gcloud projects create league-sim-project --set-as-default
-   ```
-
-2. **Enable required services**
-   ```bash
-   gcloud services enable run.googleapis.com artifactregistry.googleapis.com
-   ```
-
-3. **Create Artifact Registry repository**
-   ```bash
-   gcloud artifacts repositories create league-sim-repo --repository-format=docker --location=europe-west1
-   ```
-
-4. **Build and push image**
-   ```bash
-   docker build -t europe-west1-docker.pkg.dev/league-sim-project/league-sim-repo/league-simulator:latest .
-   docker push europe-west1-docker.pkg.dev/league-sim-project/league-sim-repo/league-simulator:latest
-   ```
-
-5. **Deploy to Cloud Run**
-   ```bash
-   gcloud run deploy league-simulator \
-     --image europe-west1-docker.pkg.dev/league-sim-project/league-sim-repo/league-simulator:latest \
-     --platform managed \
-     --region europe-west1 \
-     --allow-unauthenticated \
-     --port 8080
-   ```
-
-## Live Demo
-
-🌐 **API Base URL**: `https://league-simulator-282922766146.europe-west1.run.app`
-
-### Try it out:
-- **Get Standings**: `GET https://league-simulator-282922766146.europe-west1.run.app/standings`
-- **Simulate Week**: `POST https://league-simulator-282922766146.europe-west1.run.app/simulate/week`
-
-## API Testing
-
-Import the included `collection.json` file into Postman to test all endpoints with pre-configured requests.
-
-### Example Requests
-
-**Simulate one week:**
+**Quick Test Endpoints:**
 ```bash
-curl -X POST https://league-simulator-282922766146.europe-west1.run.app/simulate/week
-```
-
-**Get current standings:**
-```bash
+# Get current standings
 curl https://league-simulator-282922766146.europe-west1.run.app/standings
+
+# Simulate one week
+curl -X POST https://league-simulator-282922766146.europe-west1.run.app/simulate/week
+
+# Get championship predictions (after week 4)
+curl https://league-simulator-282922766146.europe-west1.run.app/predict
 ```
 
-**Edit match result:**
-```bash
-curl -X POST https://league-simulator-282922766146.europe-west1.run.app/match/edit \
-  -H "Content-Type: application/json" \
-  -d '{"match_id":1,"home_goals":2,"away_goals":1}'
-```
 
-**Reset league:**
-```bash
-curl -X POST https://league-simulator-282922766146.europe-west1.run.app/reset
-```
+## 📊 API Response Examples
 
-## Simulation Logic
-
-### Match Simulation
-- Teams have strength ratings that influence match outcomes
-- Goals are randomly generated based on team strength
-- Results affect standings automatically
-
-### Championship Predictions
-- Available from week 4 onwards
-- Based on current points per game and form
-- Considers remaining fixtures and strength differences
-- Provides percentage probability for each team
-- Week-based probability rules:
-  - **Week 4-5**: Teams >6 points behind eliminated
-  - **Week 6+**: Teams >3 points behind eliminated
-  - **Advanced weeks**: Only leaders have winning chances
-
-### Standings Calculation
-- 3 points for win, 1 for draw, 0 for loss
-- Sorted by: Points → Goal Difference → Goals For
-
-## Database Schema
-
-The project uses a simple SQL schema with three main tables:
-- `teams` - Team information and strength ratings
-- `matches` - Match fixtures and results
-- `standings` - Current league standings
-
-## API Response Examples
-
-### Get Standings Response
+### Standings Response (Sorted by Performance)
 ```json
 [
   {
     "team": {
-      "id": 1,
-      "name": "Manchester City",
-      "strength": 90
+      "id": 4,
+      "name": "Liverpool", 
+      "strength": 8
     },
-    "played": 5,
-    "won": 4,
-    "drawn": 1,
+    "played": 3,
+    "won": 3,
+    "drawn": 0,
     "lost": 0,
-    "goals_for": 12,
-    "goals_against": 3,
-    "goal_diff": 9,
-    "points": 13
+    "goals_for": 9,
+    "goals_against": 2,
+    "goal_diff": 7,
+    "points": 9
+  },
+  {
+    "team": {
+      "id": 2,
+      "name": "Manchester City",
+      "strength": 7  
+    },
+    "played": 3,
+    "won": 2,
+    "drawn": 0,
+    "lost": 1,
+    "goals_for": 6,
+    "goals_against": 4,
+    "goal_diff": 2,
+    "points": 6
   }
 ]
 ```
 
-### Championship Predictions Response
+### Championship Predictions (Week 4+ Only)
 ```json
 {
   "championship_probabilities": [
     {
-      "team_name": "Manchester City",
-      "probability": 65.2
+      "team_name": "Liverpool",
+      "probability": 68.5
     },
     {
-      "team_name": "Arsenal",
-      "probability": 23.8
+      "team_name": "Manchester City", 
+      "probability": 22.3
+    },
+    {
+      "team_name": "Chelsea",
+      "probability": 9.2
+    },
+    {
+      "team_name": "Manchester United",
+      "probability": 0.0
     }
   ],
   "message": "Championship winning probabilities based on current form"
 }
 ```
 
-## Contributing
+### Match Fixtures Response
+```json
+[
+  [
+    {
+      "id": 1,
+      "home": {"id": 1, "name": "Manchester United", "strength": 5},
+      "away": {"id": 2, "name": "Manchester City", "strength": 7},
+      "home_goals": 1,
+      "away_goals": 3,
+      "played": true,
+      "week": 1
+    }
+  ],
+  [
+    {
+      "id": 7,
+      "home": {"id": 2, "name": "Manchester City", "strength": 7},
+      "away": {"id": 1, "name": "Manchester United", "strength": 5},
+      "home_goals": 0,
+      "away_goals": 0,
+      "played": false,
+      "week": 4
+    }
+  ]
+]
+```
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+## 📄 License
 
-## License
-
-This project is open source and available under the MIT License.
+This project is open source and available under the [MIT License](LICENSE).
 
 ---
 
-**Built with ❤️ in Go**
+**🏆 Technical Case Study - Football League Simulator API**  
+*Demonstrating Go backend development excellence with clean architecture principles*
 
-For questions or support, please open an issue in the repository.
+For technical questions or code review feedback, please open an issue in this repository.
