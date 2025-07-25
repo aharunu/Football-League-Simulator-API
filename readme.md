@@ -307,10 +307,3 @@ CREATE TABLE standings (
 ## 📄 License
 
 This project is open source and available under the [MIT License](LICENSE).
-
----
-
-**🏆 Technical Case Study - Football League Simulator API**  
-*Demonstrating Go backend development excellence with clean architecture principles*
-
-For technical questions or code review feedback, please open an issue in this repository.
