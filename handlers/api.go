@@ -24,6 +24,7 @@ func NewAPI(sim services.LeagueSimulator, pred services.Predictor) *API {
 }
 
 func (api *API) RegisterRoutes(router *mux.Router) {
+	router.HandleFunc("/", api.LandingPage).Methods("GET")
 	router.HandleFunc("/simulate/week", api.SimulateWeek).Methods("POST")
 	router.HandleFunc("/simulate/all", api.SimulateAll).Methods("POST")
 	router.HandleFunc("/standings", api.GetStandings).Methods("GET")
@@ -31,6 +32,11 @@ func (api *API) RegisterRoutes(router *mux.Router) {
 	router.HandleFunc("/matches", api.Matches).Methods("GET")
 	router.HandleFunc("/match/edit", api.EditMatchResult).Methods("POST")
 	router.HandleFunc("/reset", api.Reset).Methods("POST")
+}
+
+func (api *API) LandingPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte("Football League Simulator API"))
 }
 
 func (api *API) SimulateWeek(w http.ResponseWriter, r *http.Request) {

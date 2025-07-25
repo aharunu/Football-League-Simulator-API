@@ -60,50 +60,26 @@ League Simulator/
 }
 ```
 
-## 💾 Database Schema Design
+## 🧪 API Testing & Validation
 
-```sql
--- Team entity with strength rating
-CREATE TABLE teams (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    strength INTEGER NOT NULL  -- Used in simulation algorithm
-);
+### Production Postman Collection
 
--- Match entity with complete game state
-CREATE TABLE matches (
-    id INTEGER PRIMARY KEY,
-    home_team_id INTEGER,
-    away_team_id INTEGER,
-    home_goals INTEGER,
-    away_goals INTEGER,
-    played BOOLEAN,
-    week INTEGER,
-    FOREIGN KEY (home_team_id) REFERENCES teams(id),
-    FOREIGN KEY (away_team_id) REFERENCES teams(id)
-);
+A dedicated Postman collection is included for the live production instance. All endpoints are pre-configured with the production base URL:
 
--- League standings with comprehensive statistics
-CREATE TABLE standings (
-    team_id INTEGER PRIMARY KEY,
-    played INTEGER,
-    won INTEGER,
-    drawn INTEGER,
-    lost INTEGER,
-    goals_for INTEGER,
-    goals_against INTEGER,
-    goal_diff INTEGER,
-    points INTEGER,
-    FOREIGN KEY (team_id) REFERENCES teams(id)
-);
+- **Base URL:** `https://league-simulator-282922766146.europe-west1.run.app`
+- **Usage:** Import `collection.json` into Postman to test the live API endpoints directly. All requests are already configured to use the production base URL, so no additional environment setup is required.
+
+**Quick Test Endpoints:**
+```bash
+# Get current standings
+curl https://league-simulator-282922766146.europe-west1.run.app/standings
+
+# Simulate one week
+curl -X POST https://league-simulator-282922766146.europe-west1.run.app/simulate/week
+
+# Get championship predictions (after week 4)
+curl https://league-simulator-282922766146.europe-west1.run.app/predict
 ```
-
-## 🚀 Getting Started
-
-### Prerequisites
-- **Go 1.24+** (Uses latest language features)
-- **Docker** (Optional, for containerization)
-- **Google Cloud CLI** (For production deployment)
 
 ### Local Development Setup
 
@@ -135,26 +111,6 @@ CREATE TABLE standings (
    curl http://localhost:8080/standings
    ```
 
-## 🧪 API Testing & Validation
-
-### Production Postman Collection
-
-A dedicated Postman collection is included for the live production instance. All endpoints are pre-configured to use the production base URL:
-
-- **Base URL:** `https://league-simulator-282922766146.europe-west1.run.app`
-- **Usage:** Import `collection.json` and select the "Production" environment to test live API endpoints.
-
-**Quick Test Endpoints:**
-```bash
-# Get current standings
-curl https://league-simulator-282922766146.europe-west1.run.app/standings
-
-# Simulate one week
-curl -X POST https://league-simulator-282922766146.europe-west1.run.app/simulate/week
-
-# Get championship predictions (after week 4)
-curl https://league-simulator-282922766146.europe-west1.run.app/predict
-```
 
 
 ## 📊 API Response Examples
@@ -247,6 +203,44 @@ curl https://league-simulator-282922766146.europe-west1.run.app/predict
   ]
 ]
 ```
+## 💾 Database Schema Design
+
+```sql
+-- Team entity with strength rating
+CREATE TABLE teams (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    strength INTEGER NOT NULL  -- Used in simulation algorithm
+);
+
+-- Match entity with complete game state
+CREATE TABLE matches (
+    id INTEGER PRIMARY KEY,
+    home_team_id INTEGER,
+    away_team_id INTEGER,
+    home_goals INTEGER,
+    away_goals INTEGER,
+    played BOOLEAN,
+    week INTEGER,
+    FOREIGN KEY (home_team_id) REFERENCES teams(id),
+    FOREIGN KEY (away_team_id) REFERENCES teams(id)
+);
+
+-- League standings with comprehensive statistics
+CREATE TABLE standings (
+    team_id INTEGER PRIMARY KEY,
+    played INTEGER,
+    won INTEGER,
+    drawn INTEGER,
+    lost INTEGER,
+    goals_for INTEGER,
+    goals_against INTEGER,
+    goal_diff INTEGER,
+    points INTEGER,
+    FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+```
+
 
 ## 📄 License
 
