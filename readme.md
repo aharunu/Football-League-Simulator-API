@@ -5,7 +5,7 @@ A comprehensive football league simulation API built with Go that allows you to 
 ## Tech Stack
 
 - **Backend**: Go 1.24+
-- **HTTP Router**: Gorilla Mux
+- **HTTP Router**: gorilla/mux
 - **Containerization**: Docker
 - **Cloud Deployment**: Google Cloud Run
 - **API Testing**: Postman Collection included
@@ -13,7 +13,7 @@ A comprehensive football league simulation API built with Go that allows you to 
 ## Project Structure
 
 ```
-League Simulator/
+Football-League-Simulator-API/
 ├── handlers/
 │   └── api.go              # HTTP handlers and routes
 ├── models/
@@ -99,17 +99,79 @@ curl https://league-simulator-282922766146.europe-west1.run.app/predict
 3. **Verify Installation**
    ```bash
    curl http://localhost:8080/standings
-   # Should return empty standings array: []
+   # Should return standings
    ```
 
-4. **Test Core Functionality**
+4. **Test All Functionalities**
    ```bash
-   # Simulate first week
+   # 1. View landing page
+   curl http://localhost:8080/
+   
+   # 2. Check initial empty standings
+   curl http://localhost:8080/standings
+   
+   # 3. View all unplayed matches
+   curl http://localhost:8080/matches
+   
+   # 4. Simulate first week
    curl -X POST http://localhost:8080/simulate/week
    
-   # Check updated standings
+   # 5. Check updated standings after week 1
    curl http://localhost:8080/standings
+   
+   # 6. Simulate 3 more weeks (total 4 weeks for predictions)
+   curl -X POST http://localhost:8080/simulate/week
+   curl -X POST http://localhost:8080/simulate/week
+   curl -X POST http://localhost:8080/simulate/week
+   
+   # 7. Get championship predictions (available after week 4)
+   curl http://localhost:8080/predict
+   
+   # 8. Edit a match result
+   curl -X POST http://localhost:8080/match/edit \
+     -H "Content-Type: application/json" \
+     -d '{"match_id":1,"home_goals":5,"away_goals":0}'
+   
+   # 9. Check standings after manual edit
+   curl http://localhost:8080/standings
+   
+   # 10. Simulate all remaining matches
+   curl -X POST http://localhost:8080/simulate/all
+   
+   # 11. View final standings
+   curl http://localhost:8080/standings
+   
+   # 12. Reset league to start over
+   curl -X POST http://localhost:8080/reset
    ```
+## 🐳 Run with Docker
+
+You can build and run the API using Docker without installing Go locally:
+
+### 1. Build Docker Image
+
+```bash
+docker build -t football-league-simulator .
+```
+### 2. Run The Container
+```bash
+docker run -p 8080:8080 football-league-simulator
+```
+The API will now be accessible at:
+http://localhost:8080
+
+### 3. Test Endpoints
+```bash
+# Get current standings
+curl http://localhost:8080/standings
+
+# Simulate one week of matches
+curl -X POST http://localhost:8080/simulate/week
+
+# View all matches
+curl http://localhost:8080/matches
+```
+
 
 
 
