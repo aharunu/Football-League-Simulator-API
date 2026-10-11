@@ -21,8 +21,8 @@ WORKDIR /app
 # Copy the built binary from builder
 COPY --from=builder /app/league-simulator .
 
-# Copy static files (if any), db, etc.
-COPY db ./db
+# Listen on the container interface; host port mapping can remain local.
+ENV LISTEN_ADDR=0.0.0.0:8080
 
 # Expose port (change if your app uses a different port)
 EXPOSE 8080

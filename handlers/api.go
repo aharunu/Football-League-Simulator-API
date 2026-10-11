@@ -2,13 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"math"
 	"net/http"
+	"sort"
 
 	"league-simulator/models"
 	"league-simulator/services"
-
-	"github.com/gorilla/mux"
 )
 
 type API struct {
@@ -23,15 +24,15 @@ func NewAPI(sim services.LeagueSimulator, pred services.Predictor) *API {
 	}
 }
 
-func (api *API) RegisterRoutes(router *mux.Router) {
-	router.HandleFunc("/", api.LandingPage).Methods("GET")
-	router.HandleFunc("/simulate/week", api.SimulateWeek).Methods("POST")
-	router.HandleFunc("/simulate/all", api.SimulateAll).Methods("POST")
-	router.HandleFunc("/standings", api.GetStandings).Methods("GET")
-	router.HandleFunc("/predict", api.PredictRemaining).Methods("GET")
-	router.HandleFunc("/matches", api.Matches).Methods("GET")
-	router.HandleFunc("/match/edit", api.EditMatchResult).Methods("POST")
-	router.HandleFunc("/reset", api.Reset).Methods("POST")
+func (api *API) RegisterRoutes(router *http.ServeMux) {
+	router.HandleFunc("GET /{$}", api.LandingPage)
+	router.HandleFunc("POST /simulate/week", api.SimulateWeek)
+	router.HandleFunc("POST /simulate/all", api.SimulateAll)
+	router.HandleFunc("GET /standings", api.GetStandings)
+	router.HandleFunc("GET /predict", api.PredictRemaining)
+	router.HandleFunc("GET /matches", api.Matches)
+	router.HandleFunc("POST /match/edit", api.EditMatchResult)
+	router.HandleFunc("POST /reset", api.Reset)
 }
 
 func (api *API) LandingPage(w http.ResponseWriter, r *http.Request) {
@@ -72,21 +73,23 @@ func (api *API) GetStandings(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(standings)
 }
 func (api *API) PredictRemaining(w http.ResponseWriter, r *http.Request) {
-	allMatches := api.Simulator.Matches()
+	allMatches, currentStandings := api.Simulator.Snapshot()
 	var flatMatches []models.Match
 	for _, weekMatches := range allMatches {
 		flatMatches = append(flatMatches, weekMatches...)
 	}
 
-	currentStandings := api.Simulator.StandingsCopy()
-
-	// Check if at least 4 weeks have been played
-	minGamesPlayed := 4
-	hasEnoughGames := false
-	for _, standing := range currentStandings {
-		if standing.Played >= minGamesPlayed {
-			hasEnoughGames = true
-			break
+	// Require four complete rounds, not four arbitrary results for one team.
+	requiredWeeks := 4
+	if len(allMatches) < requiredWeeks {
+		requiredWeeks = len(allMatches)
+	}
+	hasEnoughGames := requiredWeeks > 0
+	for _, week := range allMatches[:requiredWeeks] {
+		for _, match := range week {
+			if !match.Played {
+				hasEnoughGames = false
+			}
 		}
 	}
 
@@ -100,230 +103,95 @@ func (api *API) PredictRemaining(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Calculate championship probabilities
-	championshipProbabilities := calculateChampionshipProbabilities(flatMatches, currentStandings)
+	championshipProbabilities := calculateChampionshipProbabilities(flatMatches, currentStandings, api.Predictor)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{
 		"championship_probabilities": championshipProbabilities,
-		"message":                    "Championship winning probabilities based on current form",
+		"message":                    "Heuristic championship estimates based on current form; not calibrated probabilities",
 	}); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }
 
 // calculateChampionshipProbabilities calculates each team's probability of winning the league
-func calculateChampionshipProbabilities(matches []models.Match, standings map[int]*models.Standing) []map[string]any {
-	// Get predicted final standings
-	predictedStandings := make(map[int]*models.Standing)
-	for id, standing := range standings {
-		predictedStandings[id] = &models.Standing{
-			Team:         standing.Team,
-			Played:       standing.Played,
-			Won:          standing.Won,
-			Drawn:        standing.Drawn,
-			Lost:         standing.Lost,
-			GoalsFor:     standing.GoalsFor,
-			GoalsAgainst: standing.GoalsAgainst,
-			GoalDiff:     standing.GoalDiff,
-			Points:       standing.Points,
-		}
-	}
-
-	// Simulate remaining matches
+func calculateChampionshipProbabilities(matches []models.Match, standings map[int]*models.Standing, predictor services.Predictor) []map[string]any {
+	predicted := predictor.PredictFinalStandings(matches, standings)
+	ids := make([]int, 0, len(standings))
+	remaining := make(map[int]int)
 	for _, match := range matches {
 		if !match.Played {
-			homeStanding := predictedStandings[match.Home.ID]
-			awayStanding := predictedStandings[match.Away.ID]
-
-			homePointsPerGame := 0.0
-			awayPointsPerGame := 0.0
-
-			if homeStanding.Played > 0 {
-				homePointsPerGame = float64(homeStanding.Points) / float64(homeStanding.Played)
-			}
-			if awayStanding.Played > 0 {
-				awayPointsPerGame = float64(awayStanding.Points) / float64(awayStanding.Played)
-			}
-
-			formDifference := homePointsPerGame - awayPointsPerGame
-
-			if formDifference > 0.5 {
-				homeStanding.Won++
-				homeStanding.Points += 3
-				awayStanding.Lost++
-			} else if formDifference < -0.5 {
-				awayStanding.Won++
-				awayStanding.Points += 3
-				homeStanding.Lost++
-			} else {
-				homeStanding.Drawn++
-				homeStanding.Points += 1
-				awayStanding.Drawn++
-				awayStanding.Points += 1
-			}
-
-			homeStanding.Played++
-			awayStanding.Played++
+			remaining[match.Home.ID]++
+			remaining[match.Away.ID]++
 		}
 	}
-
-	// Convert to slice and find max points
-	var allStandings []models.Standing
-	maxPoints := 0
-	for _, standing := range predictedStandings {
-		allStandings = append(allStandings, *standing)
-		if standing.Points > maxPoints {
-			maxPoints = standing.Points
+	maxCurrent, maxPredicted := 0, 0
+	for id, st := range standings {
+		ids = append(ids, id)
+		if st.Points > maxCurrent {
+			maxCurrent = st.Points
+		}
+		if predicted[id].Points > maxPredicted {
+			maxPredicted = predicted[id].Points
 		}
 	}
-
-	// Calculate probabilities based on points difference from leader
-	var probabilities []map[string]any
-	totalProbability := 0.0
-
-	for _, standing := range allStandings {
-		pointsDiff := maxPoints - standing.Points
-
-		// Apply stricter rules based on week
-		week := 0
-		for _, s := range standings {
-			if s.Played > week {
-				week = s.Played
+	sort.Ints(ids)
+	finished := len(remaining) == 0
+	var winner *models.Standing
+	if finished {
+		for _, id := range ids {
+			st := standings[id]
+			if winner == nil || st.Points > winner.Points || (st.Points == winner.Points && (st.GoalDiff > winner.GoalDiff || (st.GoalDiff == winner.GoalDiff && st.GoalsFor > winner.GoalsFor))) {
+				winner = st
 			}
 		}
-
-		var probability float64
-		switch {
-		case week >= 6:
-			// In 6th week, only the leader can win
-			if pointsDiff == 0 {
-				probability = 100.0
-			} else {
-				probability = 0.0
+	}
+	weights := make([]float64, len(ids))
+	total := 0.0
+	for i, id := range ids {
+		st := standings[id]
+		if finished {
+			if st.Points == winner.Points && st.GoalDiff == winner.GoalDiff && st.GoalsFor == winner.GoalsFor {
+				weights[i] = 1
 			}
-		case week >= 5:
-			// After 5th week, >3 points behind can't win
-			if pointsDiff == 0 {
-				probability = 50.0
-			} else if pointsDiff <= 3 {
-				probability = 30.0
-			} else {
-				probability = 0.0
-			}
-		case week >= 4:
-			// After 4th week, >6 points behind can't win
-			if pointsDiff == 0 {
-				probability = 50.0
-			} else if pointsDiff <= 3 {
-				probability = 30.0
-			} else if pointsDiff <= 6 {
-				probability = 15.0
-			} else {
-				probability = 0.0
-			}
-		default:
-			// Default probabilities
-			if pointsDiff == 0 {
-				probability = 50.0
-			} else if pointsDiff <= 3 {
-				probability = 30.0
-			} else if pointsDiff <= 6 {
-				probability = 15.0
-			} else if pointsDiff <= 9 {
-				probability = 4.0
-			} else {
-				probability = 1.0
+		} else if st.Points+3*remaining[id] >= maxCurrent {
+			diff := maxPredicted - predicted[id].Points
+			switch {
+			case diff == 0:
+				weights[i] = 50
+			case diff <= 3:
+				weights[i] = 30
+			case diff <= 6:
+				weights[i] = 15
+			case diff <= 9:
+				weights[i] = 4
+			default:
+				weights[i] = 1
 			}
 		}
-
-		probabilities = append(probabilities, map[string]any{
-			"team_name":   standing.Team.Name,
-			"probability": probability,
-		})
-		totalProbability += probability
+		total += weights[i]
 	}
-
-	// Normalize probabilities to sum to 100%
-	for i := range probabilities {
-		originalProb := probabilities[i]["probability"].(float64)
-		normalizedProb := (originalProb / totalProbability) * 100
-		probabilities[i]["probability"] = round(normalizedProb, 1)
+	// Allocate tenths by largest remainder so the returned sum is exactly 100%.
+	units := make([]int, len(ids))
+	fractions := make([]float64, len(ids))
+	order := make([]int, len(ids))
+	used := 0
+	for i := range ids {
+		exact := weights[i] / total * 1000
+		units[i] = int(math.Floor(exact))
+		used += units[i]
+		fractions[i] = exact - float64(units[i])
+		order[i] = i
 	}
-
-	return probabilities
-}
-
-// calculateMatchPredictions calculates win percentages for unplayed matches based on current standings
-func calculateMatchPredictions(matches []models.Match, standings map[int]*models.Standing) []map[string]any {
-	var predictions []map[string]any
-
-	for _, match := range matches {
-		if !match.Played {
-			homeStanding := standings[match.Home.ID]
-			awayStanding := standings[match.Away.ID]
-
-			// Calculate points per game (avoid division by zero)
-			homePointsPerGame := 0.0
-			awayPointsPerGame := 0.0
-
-			if homeStanding.Played > 0 {
-				homePointsPerGame = float64(homeStanding.Points) / float64(homeStanding.Played)
-			}
-			if awayStanding.Played > 0 {
-				awayPointsPerGame = float64(awayStanding.Points) / float64(awayStanding.Played)
-			}
-
-			// Calculate strength ratio (no home advantage)
-			homeStrength := homePointsPerGame
-			awayStrength := awayPointsPerGame
-			totalStrength := homeStrength + awayStrength
-
-			// Calculate percentages
-			homeWinPercentage := 0.0
-			awayWinPercentage := 0.0
-			drawPercentage := 15.0 // Base draw percentage
-
-			if totalStrength > 0 {
-				homeWinPercentage = (homeStrength / totalStrength) * 85.0 // 85% for non-draw outcomes
-				awayWinPercentage = (awayStrength / totalStrength) * 85.0
-			} else {
-				// If no games played, assume equal chances
-				homeWinPercentage = 42.5
-				awayWinPercentage = 42.5
-				drawPercentage = 15.0
-			}
-
-			// Ensure percentages add up to 100%
-			total := homeWinPercentage + awayWinPercentage + drawPercentage
-			if total > 0 {
-				homeWinPercentage = (homeWinPercentage / total) * 100
-				awayWinPercentage = (awayWinPercentage / total) * 100
-				drawPercentage = (drawPercentage / total) * 100
-			}
-
-			predictions = append(predictions, map[string]any{
-				"match_id":            match.ID,
-				"home_team":           match.Home.Name,
-				"away_team":           match.Away.Name,
-				"week":                match.Week,
-				"home_win_percentage": round(homeWinPercentage, 1),
-				"away_win_percentage": round(awayWinPercentage, 1),
-				"draw_percentage":     round(drawPercentage, 1),
-				"home_current_points": homeStanding.Points,
-				"away_current_points": awayStanding.Points,
-				"home_played":         homeStanding.Played,
-				"away_played":         awayStanding.Played,
-			})
-		}
+	sort.SliceStable(order, func(i, j int) bool { return fractions[order[i]] > fractions[order[j]] })
+	for i := 0; i < 1000-used && len(order) > 0; i++ {
+		units[order[i%len(order)]]++
 	}
-
-	return predictions
-}
-
-// round rounds a float64 to specified decimal places
-func round(val float64, precision int) float64 {
-	ratio := math.Pow(10, float64(precision))
-	return math.Round(val*ratio) / ratio
+	result := make([]map[string]any, 0, len(ids))
+	for i, id := range ids {
+		result = append(result, map[string]any{"team_name": standings[id].Team.Name, "probability": float64(units[i]) / 10})
+	}
+	return result
 }
 
 func (api *API) Matches(w http.ResponseWriter, r *http.Request) {
@@ -335,25 +203,44 @@ func (api *API) Matches(w http.ResponseWriter, r *http.Request) {
 }
 func (api *API) EditMatchResult(w http.ResponseWriter, r *http.Request) {
 	var result struct {
-		MatchID   int `json:"match_id"`
-		HomeGoals int `json:"home_goals"`
-		AwayGoals int `json:"away_goals"`
+		MatchID   *int `json:"match_id"`
+		HomeGoals *int `json:"home_goals"`
+		AwayGoals *int `json:"away_goals"`
 	}
-
-	if err := json.NewDecoder(r.Body).Decode(&result); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	fail := func(status int, message string) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(map[string]string{"error": message})
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&result); err != nil {
+		fail(http.StatusBadRequest, "Invalid request body")
 		return
 	}
-
-	err := api.Simulator.EditMatchResult(result.MatchID, result.HomeGoals, result.AwayGoals)
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		fail(http.StatusBadRequest, "Expected one JSON object")
+		return
+	}
+	if result.MatchID == nil || result.HomeGoals == nil || result.AwayGoals == nil || *result.MatchID <= 0 {
+		fail(http.StatusBadRequest, "match_id, home_goals and away_goals are required; match_id must be positive")
+		return
+	}
+	err := api.Simulator.EditMatchResult(*result.MatchID, *result.HomeGoals, *result.AwayGoals)
+	if errors.Is(err, services.ErrInvalidScore) {
+		fail(http.StatusBadRequest, err.Error())
+		return
+	}
+	if errors.Is(err, services.ErrMatchNotFound) {
+		fail(http.StatusNotFound, err.Error())
+		return
+	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		fail(http.StatusInternalServerError, "Unable to update match")
 		return
 	}
-
-	api.Simulator.RecalculateStandings()
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Match result updated"})
 }
 

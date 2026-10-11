@@ -1,14 +1,20 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"league-simulator/models"
 	"math/rand"
 	"sort"
+	"sync"
 )
 
 // LeagueSimulator defines the interface for the league simulation.
+var ErrMatchNotFound = errors.New("match not found")
+var ErrInvalidScore = errors.New("scores must be between 0 and 100")
+
 type LeagueSimulator interface {
+	Snapshot() ([][]models.Match, map[int]*models.Standing)
 	SimulateWeek() bool
 	SimulateAll()
 	GetStandings() []models.Standing
@@ -23,6 +29,7 @@ type LeagueSimulator interface {
 // SimulatorImpl implements the LeagueSimulator interface.
 
 type SimulatorImpl struct {
+	mu          sync.RWMutex
 	teams       []models.Team
 	matches     [][]models.Match
 	standings   map[int]*models.Standing
@@ -36,7 +43,7 @@ func NewSimulator(teams []models.Team) LeagueSimulator {
 	}
 
 	return &SimulatorImpl{
-		teams:       teams,
+		teams:       append([]models.Team(nil), teams...),
 		standings:   standings,
 		matches:     generateFixtures(teams),
 		currentWeek: 0,
@@ -44,13 +51,24 @@ func NewSimulator(teams []models.Team) LeagueSimulator {
 }
 func generateFixtures(teams []models.Team) [][]models.Match {
 	numTeams := len(teams)
+	if numTeams < 2 {
+		return [][]models.Match{}
+	}
+	// A nil entry is a bye for leagues with an odd number of teams.
+	slots := make([]*models.Team, numTeams)
+	for i := range teams {
+		slots[i] = &teams[i]
+	}
+	if numTeams%2 != 0 {
+		slots = append(slots, nil)
+		numTeams++
+	}
 	weeks := (numTeams - 1) * 2
 	fixtures := make([][]models.Match, weeks)
 	matchID := 1
 
 	// Takımların sırasını değiştirmemek için kopyasını al
-	teamList := make([]models.Team, numTeams)
-	copy(teamList, teams)
+	teamList := append([]*models.Team(nil), slots...)
 
 	// İlk devre
 	for w := 0; w < numTeams-1; w++ {
@@ -58,75 +76,79 @@ func generateFixtures(teams []models.Team) [][]models.Match {
 		for i := 0; i < numTeams/2; i++ {
 			home := teamList[i]
 			away := teamList[numTeams-1-i]
+			if home == nil || away == nil {
+				continue
+			}
 			weekMatches = append(weekMatches, models.Match{
 				ID:     matchID,
-				Home:   home,
-				Away:   away,
+				Home:   *home,
+				Away:   *away,
 				Week:   w + 1,
 				Played: false,
 			})
 			matchID++
 		}
 		fixtures[w] = weekMatches
-		teamList = append([]models.Team{teamList[0]}, append(teamList[numTeams-1:], teamList[1:numTeams-1]...)...)
+		teamList = append([]*models.Team{teamList[0]}, append(teamList[numTeams-1:], teamList[1:numTeams-1]...)...)
 	}
 
 	// İkinci devre (ev-deplasman değişimi)
-	teamList2 := make([]models.Team, numTeams)
-	copy(teamList2, teams)
+	teamList2 := append([]*models.Team(nil), slots...)
 	for w := 0; w < numTeams-1; w++ {
 		var weekMatches []models.Match
 		for i := 0; i < numTeams/2; i++ {
 			home := teamList2[numTeams-1-i]
 			away := teamList2[i]
+			if home == nil || away == nil {
+				continue
+			}
 			weekMatches = append(weekMatches, models.Match{
 				ID:     matchID,
-				Home:   home,
-				Away:   away,
+				Home:   *home,
+				Away:   *away,
 				Week:   w + numTeams,
 				Played: false,
 			})
 			matchID++
 		}
 		fixtures[w+numTeams-1] = weekMatches
-		teamList2 = append([]models.Team{teamList2[0]}, append(teamList2[numTeams-1:], teamList2[1:numTeams-1]...)...)
+		teamList2 = append([]*models.Team{teamList2[0]}, append(teamList2[numTeams-1:], teamList2[1:numTeams-1]...)...)
 	}
 
 	return fixtures
 }
 
 func (s *SimulatorImpl) SimulateWeek() bool {
-	if s.currentWeek >= len(s.matches) {
-		return false // Tüm maçlar oynandı
-	}
-
-	weekMatches := s.matches[s.currentWeek]
-	allPlayed := true
-
-	for i := range weekMatches {
-		match := &weekMatches[i]
-		if !match.Played {
-			homeGoals, awayGoals := simulateMatch(match.Home.Strength, match.Away.Strength)
-
-			match.HomeGoals = homeGoals
-			match.AwayGoals = awayGoals
-			match.Played = true
-
-			updateStandings(s.standings, *match)
-			allPlayed = false
-		}
-	}
-
-	s.matches[s.currentWeek] = weekMatches
-	s.currentWeek++
-	return !allPlayed
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.simulateWeek()
 }
 
-// SimulateAll simulates all remaining weeks until no more matches can be played.
+func (s *SimulatorImpl) simulateWeek() bool {
+	for s.currentWeek < len(s.matches) {
+		played := false
+		for i := range s.matches[s.currentWeek] {
+			match := &s.matches[s.currentWeek][i]
+			if match.Played {
+				continue
+			}
+			match.HomeGoals, match.AwayGoals = simulateMatch(match.Home.Strength, match.Away.Strength)
+			match.Played = true
+			updateStandings(s.standings, *match)
+			played = true
+		}
+		s.currentWeek++
+		if played {
+			return true
+		}
+	}
+	return false
+}
 
 func (s *SimulatorImpl) SimulateAll() {
-	for s.SimulateWeek() {
-		// Simulate all weeks until no more matches can be played
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for s.simulateWeek() {
 	}
 }
 
@@ -141,6 +163,9 @@ func randomGoals(strength int) int {
 	base := float64(strength) / 5
 	noise := rand.NormFloat64() * 0.5 // normal noise
 	goals := int(base + noise + 1.5)
+	if goals < 0 {
+		return 0
+	}
 	if goals > 5 {
 		return 5
 	}
@@ -179,44 +204,32 @@ func updateStandings(standings map[int]*models.Standing, match models.Match) {
 
 // EditMatchResult allows editing the result of a specific match by ID
 func (s *SimulatorImpl) EditMatchResult(matchID, homeGoals, awayGoals int) error {
-	// Find the match in all weeks
-	for weekIdx := range s.matches {
-		for matchIdx := range s.matches[weekIdx] {
-			match := &s.matches[weekIdx][matchIdx]
-			if match.ID == matchID {
-				// Store old result for standings update
-				oldHomeGoals := match.HomeGoals
-				oldAwayGoals := match.AwayGoals
-
-				// Update match result
-				match.HomeGoals = homeGoals
-				match.AwayGoals = awayGoals
-				match.Played = true
-
-				// If match was already played, reverse old standings first
-				if oldHomeGoals != 0 || oldAwayGoals != 0 {
-					reverseStandings(s.standings, models.Match{
-						ID:        match.ID,
-						Home:      match.Home,
-						Away:      match.Away,
-						HomeGoals: oldHomeGoals,
-						AwayGoals: oldAwayGoals,
-						Week:      match.Week,
-						Played:    true,
-					})
-				}
-
-				// Apply new standings
-				updateStandings(s.standings, *match)
-				return nil
+	if homeGoals < 0 || awayGoals < 0 || homeGoals > 100 || awayGoals > 100 {
+		return ErrInvalidScore
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for wi := range s.matches {
+		for mi := range s.matches[wi] {
+			match := &s.matches[wi][mi]
+			if match.ID != matchID {
+				continue
 			}
+			if match.Played {
+				reverseStandings(s.standings, *match)
+			}
+			match.HomeGoals, match.AwayGoals, match.Played = homeGoals, awayGoals, true
+			updateStandings(s.standings, *match)
+			return nil
 		}
 	}
-	return fmt.Errorf("match with ID %d not found", matchID)
+	return fmt.Errorf("%w: %d", ErrMatchNotFound, matchID)
 }
 
 // RecalculateStandings recalculates all standings from scratch based on played matches
 func (s *SimulatorImpl) RecalculateStandings() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	// Reset all standings
 	for _, standing := range s.standings {
 		standing.Played = 0
@@ -272,19 +285,24 @@ func reverseStandings(standings map[int]*models.Standing, match models.Match) {
 
 // GetMatchByID finds and returns a match by its ID
 func (s *SimulatorImpl) GetMatchByID(matchID int) (*models.Match, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	for weekIdx := range s.matches {
 		for matchIdx := range s.matches[weekIdx] {
 			if s.matches[weekIdx][matchIdx].ID == matchID {
-				return &s.matches[weekIdx][matchIdx], nil
+				match := s.matches[weekIdx][matchIdx]
+				return &match, nil
 			}
 		}
 	}
-	return nil, fmt.Errorf("match with ID %d not found", matchID)
+	return nil, fmt.Errorf("%w: %d", ErrMatchNotFound, matchID)
 }
 
 // GetStandings returns the current standings of the league.
 func (s *SimulatorImpl) GetStandings() []models.Standing {
-	var standings []models.Standing
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	standings := make([]models.Standing, 0, len(s.standings))
 	for _, standing := range s.standings {
 		standings = append(standings, *standing)
 	}
@@ -297,25 +315,41 @@ func (s *SimulatorImpl) GetStandings() []models.Standing {
 		if standings[i].GoalDiff != standings[j].GoalDiff {
 			return standings[i].GoalDiff > standings[j].GoalDiff
 		}
-		return standings[i].GoalsFor > standings[j].GoalsFor
+		if standings[i].GoalsFor != standings[j].GoalsFor {
+			return standings[i].GoalsFor > standings[j].GoalsFor
+		}
+		return standings[i].Team.ID < standings[j].Team.ID
 	})
 
 	return standings
 }
-func (s *SimulatorImpl) Matches() [][]models.Match {
-	return s.matches
-}
-func (s *SimulatorImpl) StandingsCopy() map[int]*models.Standing {
-	copied := make(map[int]*models.Standing)
-	for id, st := range s.standings {
-		copy := *st
-		copied[id] = &copy
+
+// Snapshot returns detached copies of fixtures and standings from one instant.
+func (s *SimulatorImpl) Snapshot() ([][]models.Match, map[int]*models.Standing) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	matches := make([][]models.Match, len(s.matches))
+	for i, week := range s.matches {
+		matches[i] = append([]models.Match(nil), week...)
 	}
-	return copied
+	standings := make(map[int]*models.Standing, len(s.standings))
+	for id, standing := range s.standings {
+		copy := *standing
+		standings[id] = &copy
+	}
+	return matches, standings
+}
+
+func (s *SimulatorImpl) Matches() [][]models.Match { matches, _ := s.Snapshot(); return matches }
+func (s *SimulatorImpl) StandingsCopy() map[int]*models.Standing {
+	_, standings := s.Snapshot()
+	return standings
 }
 
 // Reset resets the league simulator to the initial state
 func (s *SimulatorImpl) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	// Reset all matches
 	for weekIdx := range s.matches {
 		for matchIdx := range s.matches[weekIdx] {

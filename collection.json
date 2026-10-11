@@ -2,7 +2,7 @@
   "info": {
     "name": "League Simulator API",
     "_postman_id": "12345678-90ab-cdef-1234-567890abcdef",
-    "description": "Simülasyon API'si test koleksiyonu",
+    "description": "Local football league simulator. Start with go run .; data resets when the process restarts.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -12,12 +12,14 @@
         "method": "POST",
         "header": [],
         "url": {
-          "raw": "https://league-simulator-282922766146.europe-west1.run.app/simulate/week",
-          "protocol": "https",
+          "raw": "{{baseUrl}}/simulate/week",
           "host": [
-            "league-simulator-282922766146.europe-west1.run.app"
+            "{{baseUrl}}"
           ],
-          "path": ["simulate", "week"]
+          "path": [
+            "simulate",
+            "week"
+          ]
         }
       },
       "response": []
@@ -28,12 +30,14 @@
         "method": "POST",
         "header": [],
         "url": {
-          "raw": "https://league-simulator-282922766146.europe-west1.run.app/simulate/all",
-          "protocol": "https",
+          "raw": "{{baseUrl}}/simulate/all",
           "host": [
-            "league-simulator-282922766146.europe-west1.run.app"
+            "{{baseUrl}}"
           ],
-          "path": ["simulate", "all"]
+          "path": [
+            "simulate",
+            "all"
+          ]
         }
       },
       "response": []
@@ -44,12 +48,13 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "https://league-simulator-282922766146.europe-west1.run.app/standings",
-          "protocol": "https",
+          "raw": "{{baseUrl}}/standings",
           "host": [
-            "league-simulator-282922766146.europe-west1.run.app"
+            "{{baseUrl}}"
           ],
-          "path": ["standings"]
+          "path": [
+            "standings"
+          ]
         }
       },
       "response": []
@@ -60,12 +65,13 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "https://league-simulator-282922766146.europe-west1.run.app/predict",
-          "protocol": "https",
+          "raw": "{{baseUrl}}/predict",
           "host": [
-            "league-simulator-282922766146.europe-west1.run.app"
+            "{{baseUrl}}"
           ],
-          "path": ["predict"]
+          "path": [
+            "predict"
+          ]
         }
       },
       "response": []
@@ -76,12 +82,13 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "https://league-simulator-282922766146.europe-west1.run.app/matches",
-          "protocol": "https",
+          "raw": "{{baseUrl}}/matches",
           "host": [
-            "league-simulator-282922766146.europe-west1.run.app"
+            "{{baseUrl}}"
           ],
-          "path": ["matches"]
+          "path": [
+            "matches"
+          ]
         }
       },
       "response": []
@@ -101,12 +108,14 @@
           "raw": "{\n  \"match_id\": 1,\n  \"home_goals\": 2,\n  \"away_goals\": 1\n}"
         },
         "url": {
-          "raw": "https://league-simulator-282922766146.europe-west1.run.app/match/edit",
-          "protocol": "https",
+          "raw": "{{baseUrl}}/match/edit",
           "host": [
-            "league-simulator-282922766146.europe-west1.run.app"
+            "{{baseUrl}}"
           ],
-          "path": ["match", "edit"]
+          "path": [
+            "match",
+            "edit"
+          ]
         }
       },
       "response": []
@@ -117,15 +126,23 @@
         "method": "POST",
         "header": [],
         "url": {
-          "raw": "https://league-simulator-282922766146.europe-west1.run.app/reset",
-          "protocol": "https",
+          "raw": "{{baseUrl}}/reset",
           "host": [
-            "league-simulator-282922766146.europe-west1.run.app"
+            "{{baseUrl}}"
           ],
-          "path": ["reset"]
+          "path": [
+            "reset"
+          ]
         }
       },
       "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
     }
   ]
 }
